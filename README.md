@@ -49,7 +49,7 @@ Then use `mcp-semantic-recall` as the command instead of `npx`.
 
 ### `add_memory`
 
-Store a memory with vector embeddings.
+Store a single memory with vector embeddings.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -65,6 +65,37 @@ Store a memory with vector embeddings.
     "project": "/Users/taha/projects/myapp",
     "tags": ["auth", "security", "jwt"]
   }
+}
+```
+
+### `add_memories`
+
+Store multiple memories at once with optional default metadata. Embeddings are generated in parallel for better performance.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memories` | array | Yes | Array of memory objects with `content`, optional `project`, `tags` |
+| `default_project` | string | No | Default project for all memories |
+| `default_tags` | string[] | No | Default tags for all memories |
+
+**Example:**
+```javascript
+{
+  "default_project": "/Users/taha/projects/myapp",
+  "default_tags": ["session-2026-02-22"],
+  "memories": [
+    {
+      "content": "Auth uses JWT tokens with 15min expiry",
+      "tags": ["auth", "jwt"]
+    },
+    {
+      "content": "Database is PostgreSQL with Prisma ORM",
+      "tags": ["database"]
+    },
+    {
+      "content": "Tests use vitest framework"
+    }
+  ]
 }
 ```
 
@@ -84,6 +115,24 @@ Search for memories using hybrid vector + keyword search.
   "query": "how did we handle authentication",
   "limit": 5,
   "boost_frequent": true
+}
+```
+
+### `get_related_memories`
+
+Find memories semantically similar to a given memory.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memory_id` | string | Yes | ID of the memory to find related memories for |
+| `limit` | number | No | Max results (default: 5) |
+| `boost_frequent` | boolean | No | Boost frequently-accessed memories (default: false) |
+
+**Example:**
+```javascript
+{
+  "memory_id": "abc-123-def",
+  "limit": 5
 }
 ```
 

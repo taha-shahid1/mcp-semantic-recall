@@ -1,6 +1,6 @@
 {
   "name": "mcp-semantic-recall",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP for adding semantic memory to AI coding agents",
   "type": "module",
   "main": "dist/index.js",

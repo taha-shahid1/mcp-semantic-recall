@@ -49,6 +49,43 @@ class MemoryService {
     return id;
   }
 
+  async addMemories(
+    memories: Array<{ content: string; project?: string; tags?: string[] }>,
+    defaults?: { project?: string; tags?: string[] }
+  ): Promise<string[]> {
+    const table = this.getTable();
+    if (!table) {
+      throw new Error('Database not initialized');
+    }
+
+    // Generate all embeddings in parallel (key optimization!)
+    const embeddingPromises = memories.map((m) => embeddingService.generateEmbedding(m.content));
+    const embeddings = await Promise.all(embeddingPromises);
+
+    // Create memory objects with same timestamp for batch cohesion
+    const now = Date.now();
+    const memoryObjects: Memory[] = memories.map((m, i) => {
+      const embedding = embeddings[i];
+      if (!embedding) {
+        throw new Error(`Failed to generate embedding for memory: ${m.content.slice(0, 50)}...`);
+      }
+      return {
+        id: crypto.randomUUID(),
+        content: m.content,
+        embedding,
+        timestamp: now,
+        project: m.project ?? defaults?.project,
+        tags: m.tags ?? defaults?.tags,
+        usage_count: 0,
+      };
+    });
+
+    // Single batch insert
+    await table.add(memoryObjects);
+
+    return memoryObjects.map((m) => m.id);
+  }
+
   async searchMemories(
     query: string,
     limit: number = 10,
@@ -233,6 +270,44 @@ class MemoryService {
       usage_count: result.usage_count as number | undefined,
       last_used: result.last_used as number | undefined,
     }));
+  }
+
+  async getRelatedMemories(
+    memoryId: string,
+    limit: number = 5,
+    boostFrequent: boolean = false
+  ): Promise<
+    Array<{
+      id: string;
+      content: string;
+      score: number;
+      timestamp: number;
+      project?: string;
+      tags?: string[];
+      usage_count?: number;
+    }>
+  > {
+    const table = this.getTable();
+    if (!table) {
+      throw new Error('Database not initialized');
+    }
+
+    // 1. Get the source memory
+    const escapedId = escapeSqlString(memoryId);
+    const sourceResults = await table.query().where(`id = '${escapedId}'`).limit(1).toArray();
+
+    if (sourceResults.length === 0) {
+      throw new Error(`Memory with id ${memoryId} not found`);
+    }
+
+    const source: any = sourceResults[0];
+
+    // 2. Search using the source memory's content
+    // This reuses the hybrid search (vector + keyword) functionality
+    const results = await this.searchMemories(source.content, limit + 1, boostFrequent);
+
+    // 3. Filter out the source memory itself and limit results
+    return results.filter((r) => r.id !== memoryId).slice(0, limit);
   }
 }
 

@@ -25,8 +25,16 @@
     "vector-database",
     "lancedb"
   ],
-  "author": "",
+  "author": "Your Name <your.email@example.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/mcp-semantic-recall"
+  },
+  "homepage": "https://github.com/yourusername/mcp-semantic-recall#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/mcp-semantic-recall/issues"
+  },
   "dependencies": {
     "@lancedb/lancedb": "^0.26.2",
     "@modelcontextprotocol/sdk": "^1.26.0",

@@ -2,6 +2,7 @@ import { connect, type Connection, type Table, Index } from '@lancedb/lancedb';
 import { embeddingService } from './embeddings.js';
 import * as path from 'path';
 import * as os from 'os';
+import * as arrow from 'apache-arrow';
 
 interface Memory extends Record<string, unknown> {
   id: string;
@@ -77,7 +78,7 @@ class DatabaseService {
     // Open or create memories table
     if (tableNames.includes(this.tableName)) {
       this.table = await this.db.openTable(this.tableName);
-      
+
       // Check if FTS index exists, create if missing
       const indices = await this.table.listIndices();
       const hasFtsIndex = indices.some((idx) => idx.columns.includes('content'));
@@ -87,17 +88,27 @@ class DatabaseService {
         });
       }
     } else {
-      // Create table with a dummy row to establish schema, then delete it
-      const dummyMemory: Memory = {
-        id: '__init__',
-        content: 'initialization',
-        embedding: new Array(embeddingService.getDimension()).fill(0),
-        timestamp: Date.now(),
-        usage_count: 0,
-      };
-      this.table = await this.db.createTable(this.tableName, [dummyMemory]);
-      await this.table.delete("id = '__init__'");
-      
+      // Create table with explicit schema to handle optional fields
+      const schema = new arrow.Schema([
+        new arrow.Field('id', new arrow.Utf8()),
+        new arrow.Field('content', new arrow.Utf8()),
+        new arrow.Field(
+          'embedding',
+          new arrow.FixedSizeList(
+            embeddingService.getDimension(),
+            new arrow.Field('item', new arrow.Float32())
+          )
+        ),
+        new arrow.Field('timestamp', new arrow.Float64()),
+        new arrow.Field('project', new arrow.Utf8(), true), // nullable
+        new arrow.Field('tags', new arrow.List(new arrow.Field('item', new arrow.Utf8())), true), // nullable
+        new arrow.Field('last_used', new arrow.Float64(), true), // nullable
+        new arrow.Field('usage_count', new arrow.Int32()),
+      ]);
+
+      // Create table with explicit schema
+      this.table = await this.db.createEmptyTable(this.tableName, schema);
+
       // Create FTS index on content column for hybrid search
       await this.table.createIndex('content', {
         config: Index.fts(),
@@ -161,10 +172,10 @@ class DatabaseService {
     let processedResults = results.map((result: any) => ({
       id: result.id as string,
       content: result.content as string,
-      score: result._distance as number,
+      score: (result._distance as number) ?? 0,
       timestamp: result.timestamp as number,
       project: result.project as string | undefined,
-      tags: result.tags as string[] | undefined,
+      tags: result.tags ? (Array.from(result.tags) as string[]) : undefined,
       usage_count: result.usage_count as number | undefined,
     }));
 
@@ -225,6 +236,8 @@ class DatabaseService {
     const existing = results[0] as Memory;
     await this.table.delete(`id = '${memoryId}'`);
 
+    const existingTags = existing.tags ? (Array.from(existing.tags) as string[]) : undefined;
+
     const updatedMemory: Memory = {
       id: memoryId,
       content: content ?? existing.content,
@@ -234,7 +247,7 @@ class DatabaseService {
           : existing.embedding,
       timestamp: existing.timestamp,
       project: metadata?.project ?? existing.project,
-      tags: metadata?.tags ?? existing.tags,
+      tags: metadata?.tags ?? existingTags,
       usage_count: existing.usage_count,
       last_used: existing.last_used,
     };
@@ -250,14 +263,12 @@ class DatabaseService {
     await this.table.delete(`id = '${memoryId}'`);
   }
 
-  async listMemories(
-    options?: {
-      project?: string;
-      tags?: string[];
-      limit?: number;
-      offset?: number;
-    }
-  ): Promise<
+  async listMemories(options?: {
+    project?: string;
+    tags?: string[];
+    limit?: number;
+    offset?: number;
+  }): Promise<
     Array<{
       id: string;
       content: string;
@@ -298,7 +309,7 @@ class DatabaseService {
       content: result.content as string,
       timestamp: result.timestamp as number,
       project: result.project as string | undefined,
-      tags: result.tags as string[] | undefined,
+      tags: result.tags ? (Array.from(result.tags) as string[]) : undefined,
       usage_count: result.usage_count as number | undefined,
       last_used: result.last_used as number | undefined,
     }));

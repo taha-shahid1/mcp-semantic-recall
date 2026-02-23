@@ -1,49 +1,57 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { databaseService } from '../lib/database.js';
 
-// Tool input schema
 export const UpdateMemorySchema = z.object({
-  memory_id: z.string().describe('The ID of the memory to update'),
-  content: z.string().optional().describe('New content for the memory'),
+  memory_id: z.string().describe('The unique ID of the memory to update (obtained from search results)'),
+  content: z.string().optional().describe('New content to replace the existing memory content. If content is changed, embeddings will be regenerated.'),
   metadata: z
     .object({
-      tags: z.array(z.string()).optional(),
-      context: z.string().optional(),
+      project: z.string().optional().describe('Updated project path - MUST be the current working directory path (e.g., /Users/name/projects/myapp)'),
+      tags: z.array(z.string()).optional().describe('Updated tags for categorization (e.g., ["typescript", "bug-fix"])'),
     })
     .optional()
     .describe('Updated metadata for the memory'),
 });
 
-// Tool configuration
 const name = 'update_memory';
 const config = {
   title: 'Update Memory',
-  description: 'Update an existing memory with new content or metadata',
+  description: 'Update an existing memory. You can change the content (which regenerates embeddings), project path, or tags. The original timestamp is preserved. Use this when a memory needs correction or additional information.',
   inputSchema: UpdateMemorySchema,
 };
 
-/**
- * Registers the 'update_memory' tool.
- *
- * This tool updates an existing memory's content and/or metadata.
- * If content is updated, a new embedding is generated.
- *
- * @param {McpServer} server - The McpServer instance where the tool will be registered.
- * @returns {void}
- */
 export const registerUpdateMemoryTool = (server: McpServer) => {
   server.registerTool(name, config, async (args): Promise<CallToolResult> => {
     const validatedArgs = UpdateMemorySchema.parse(args);
     const { memory_id, content, metadata } = validatedArgs;
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Memory ${memory_id} updated\nNew content: ${content}\nNew metadata: ${JSON.stringify(metadata, null, 2)}`,
-        },
-      ],
-    };
+    try {
+      await databaseService.updateMemory(memory_id, content, metadata);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Memory ${memory_id} updated successfully!${
+              content ? `\nNew content: ${content}` : ''
+            }${metadata?.project ? `\nNew project: ${metadata.project}` : ''}${
+              metadata?.tags ? `\nNew tags: ${metadata.tags.join(', ')}` : ''
+            }`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Failed to update memory: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   });
 };

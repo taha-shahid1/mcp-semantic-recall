@@ -3,6 +3,8 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerTools } from './tools/index.js';
+import { embeddingService } from './lib/embeddings.js';
+import { databaseService } from './lib/database.js';
 
 const createServer = () => {
   const server = new McpServer(
@@ -22,6 +24,13 @@ const createServer = () => {
 };
 
 async function main(): Promise<void> {
+  console.error('Initializing MCP Semantic Recall...');
+
+  await embeddingService.initialize();
+  await databaseService.initialize();
+
+  console.error('Services initialized successfully');
+
   const server = createServer();
   const transport = new StdioServerTransport();
 
@@ -29,6 +38,8 @@ async function main(): Promise<void> {
   console.error('MCP Semantic Recall server running on stdio');
 
   process.on('SIGINT', async () => {
+    console.error('Shutting down...');
+    await databaseService.close();
     await server.close();
     process.exit(0);
   });

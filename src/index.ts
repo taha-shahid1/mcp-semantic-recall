@@ -1,26 +1,33 @@
+#!/usr/bin/env node
+
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTools } from './tools/index.js';
 
-// Create MCP server instance
-const server = new McpServer(
-  {
-    name: 'mcp-semantic-recall',
-    version: '0.1.0',
-  },
-  {
-    capabilities: {
-      tools: {},
+const createServer = () => {
+  const server = new McpServer(
+    {
+      name: 'mcp-semantic-recall',
+      version: '0.1.0',
     },
-  }
-);
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
-// Start server
+  registerTools(server);
+  return server;
+};
+
 async function main(): Promise<void> {
+  const server = createServer();
   const transport = new StdioServerTransport();
+
   await server.connect(transport);
   console.error('MCP Semantic Recall server running on stdio');
 
-  // Cleanup on exit
   process.on('SIGINT', async () => {
     await server.close();
     process.exit(0);

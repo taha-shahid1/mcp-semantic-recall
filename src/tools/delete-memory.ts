@@ -1,16 +1,19 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { databaseService } from '../lib/database.js';
+import { memoryService } from '../lib/database.js';
 
 export const DeleteMemorySchema = z.object({
-  memory_id: z.string().describe('The unique ID of the memory to delete (obtained from search results)'),
+  memory_id: z
+    .string()
+    .describe('The unique ID of the memory to delete (obtained from search results)'),
 });
 
 const name = 'delete_memory';
 const config = {
   title: 'Delete Memory',
-  description: 'Permanently delete a memory from the semantic store. This action cannot be undone. Use this when information is outdated, incorrect, or no longer relevant.',
+  description:
+    'Permanently delete a memory from the semantic store. This action cannot be undone. Use this when information is outdated, incorrect, or no longer relevant.',
   inputSchema: DeleteMemorySchema,
 };
 
@@ -20,7 +23,7 @@ export const registerDeleteMemoryTool = (server: McpServer) => {
     const { memory_id } = validatedArgs;
 
     try {
-      await databaseService.deleteMemory(memory_id);
+      await memoryService.deleteMemory(memory_id);
 
       return {
         content: [

@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { databaseService } from '../lib/database.js';
+import { memoryService } from '../lib/database.js';
 
 export const ListMemoriesSchema = z.object({
   project: z
@@ -41,7 +41,7 @@ export const registerListMemoriesTool = (server: McpServer) => {
     const cappedLimit = Math.min(limit, 100);
 
     try {
-      const results = await databaseService.listMemories({
+      const results = await memoryService.listMemories({
         project,
         tags,
         limit: cappedLimit,

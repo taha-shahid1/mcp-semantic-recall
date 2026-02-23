@@ -3,17 +3,7 @@ import { embeddingService } from './embeddings.js';
 import * as path from 'path';
 import * as os from 'os';
 import * as arrow from 'apache-arrow';
-
-interface Memory extends Record<string, unknown> {
-  id: string;
-  content: string;
-  embedding: number[];
-  timestamp: number;
-  project?: string;
-  tags?: string[];
-  last_used?: number;
-  usage_count?: number;
-}
+import MemoryService from '../services/memory-service.js';
 
 interface ConfigMetadata extends Record<string, unknown> {
   embedding_provider: string;
@@ -116,203 +106,8 @@ class DatabaseService {
     }
   }
 
-  async addMemory(
-    content: string,
-    metadata?: { project?: string; tags?: string[] }
-  ): Promise<string> {
-    if (!this.table) {
-      throw new Error('Database not initialized');
-    }
-
-    const embedding = await embeddingService.generateEmbedding(content);
-    const id = crypto.randomUUID();
-
-    const memory: Memory = {
-      id,
-      content,
-      embedding,
-      timestamp: Date.now(),
-      project: metadata?.project,
-      tags: metadata?.tags,
-      usage_count: 0,
-    };
-
-    await this.table.add([memory]);
-    return id;
-  }
-
-  async searchMemories(
-    query: string,
-    limit: number = 10,
-    boostFrequent: boolean = false
-  ): Promise<
-    Array<{
-      id: string;
-      content: string;
-      score: number;
-      timestamp: number;
-      project?: string;
-      tags?: string[];
-      usage_count?: number;
-    }>
-  > {
-    if (!this.table) {
-      throw new Error('Database not initialized');
-    }
-
-    const queryEmbedding = await embeddingService.generateEmbedding(query);
-
-    // Hybrid search: vector similarity + full-text search
-    const results = await this.table
-      .vectorSearch(queryEmbedding)
-      .fullTextSearch(query)
-      .limit(limit * 3)
-      .toArray();
-
-    let processedResults = results.map((result: any) => ({
-      id: result.id as string,
-      content: result.content as string,
-      score: (result._distance as number) ?? 0,
-      timestamp: result.timestamp as number,
-      project: result.project as string | undefined,
-      tags: result.tags ? (Array.from(result.tags) as string[]) : undefined,
-      usage_count: result.usage_count as number | undefined,
-    }));
-
-    // Update usage tracking for retrieved memories
-    const updatePromises = processedResults.slice(0, limit).map(async (result) => {
-      try {
-        await this.table!.update({
-          where: `id = '${result.id}'`,
-          values: {
-            usage_count: (result.usage_count ?? 0) + 1,
-            last_used: Date.now(),
-          },
-        });
-      } catch (error) {
-        // Non-critical: log but don't fail the search
-        console.error(`Failed to update usage for ${result.id}:`, error);
-      }
-    });
-
-    // Don't await - let updates happen async
-    Promise.all(updatePromises).catch(() => {});
-
-    if (boostFrequent) {
-      processedResults = processedResults.map((result) => {
-        const usageCount = result.usage_count ?? 0;
-        // Usage factor: 0.0 for never used, caps at 1.0 for 10+ uses
-        const usageFactor = Math.min(1.0, usageCount / 10);
-        // For distance metrics (lower is better), reduce score for frequently used items
-        const boostedScore = result.score * (1 - usageFactor * 0.4);
-
-        return {
-          ...result,
-          score: boostedScore,
-        };
-      });
-
-      processedResults.sort((a, b) => a.score - b.score);
-    }
-
-    return processedResults.slice(0, limit);
-  }
-
-  async updateMemory(
-    memoryId: string,
-    content?: string,
-    metadata?: { project?: string; tags?: string[] }
-  ): Promise<void> {
-    if (!this.table) {
-      throw new Error('Database not initialized');
-    }
-
-    const results = await this.table.query().where(`id = '${memoryId}'`).limit(1).toArray();
-
-    if (results.length === 0) {
-      throw new Error(`Memory with id ${memoryId} not found`);
-    }
-
-    const existing = results[0] as Memory;
-    await this.table.delete(`id = '${memoryId}'`);
-
-    const existingTags = existing.tags ? (Array.from(existing.tags) as string[]) : undefined;
-
-    const updatedMemory: Memory = {
-      id: memoryId,
-      content: content ?? existing.content,
-      embedding:
-        content !== undefined
-          ? await embeddingService.generateEmbedding(content)
-          : existing.embedding,
-      timestamp: existing.timestamp,
-      project: metadata?.project ?? existing.project,
-      tags: metadata?.tags ?? existingTags,
-      usage_count: existing.usage_count,
-      last_used: existing.last_used,
-    };
-
-    await this.table.add([updatedMemory]);
-  }
-
-  async deleteMemory(memoryId: string): Promise<void> {
-    if (!this.table) {
-      throw new Error('Database not initialized');
-    }
-
-    await this.table.delete(`id = '${memoryId}'`);
-  }
-
-  async listMemories(options?: {
-    project?: string;
-    tags?: string[];
-    limit?: number;
-    offset?: number;
-  }): Promise<
-    Array<{
-      id: string;
-      content: string;
-      timestamp: number;
-      project?: string;
-      tags?: string[];
-      usage_count?: number;
-      last_used?: number;
-    }>
-  > {
-    if (!this.table) {
-      throw new Error('Database not initialized');
-    }
-
-    const limit = options?.limit ?? 50;
-    const offset = options?.offset ?? 0;
-
-    let query = this.table.query();
-
-    // Filter by project if specified
-    if (options?.project) {
-      query = query.where(`project = '${options.project}'`);
-    }
-
-    // Filter by tags if specified
-    if (options?.tags && options.tags.length > 0) {
-      const tagFilter = options.tags.map((tag) => `array_contains(tags, '${tag}')`).join(' OR ');
-      query = query.where(tagFilter);
-    }
-
-    const results = await query.limit(limit + offset).toArray();
-
-    // Manual offset (LanceDB doesn't have native offset)
-    const slicedResults = results.slice(offset, offset + limit);
-
-    return slicedResults.map((result: any) => ({
-      id: result.id as string,
-      content: result.content as string,
-      timestamp: result.timestamp as number,
-      project: result.project as string | undefined,
-      tags: result.tags ? (Array.from(result.tags) as string[]) : undefined,
-      usage_count: result.usage_count as number | undefined,
-      last_used: result.last_used as number | undefined,
-    }));
+  getTable(): Table | null {
+    return this.table;
   }
 
   async close(): Promise<void> {
@@ -322,4 +117,6 @@ class DatabaseService {
   }
 }
 
-export const databaseService = new DatabaseService();
+const databaseService = new DatabaseService();
+export const memoryService = new MemoryService(() => databaseService.getTable());
+export { databaseService };

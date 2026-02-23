@@ -1,15 +1,30 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { databaseService } from '../lib/database.js';
+import { memoryService } from '../lib/database.js';
 
 export const UpdateMemorySchema = z.object({
-  memory_id: z.string().describe('The unique ID of the memory to update (obtained from search results)'),
-  content: z.string().optional().describe('New content to replace the existing memory content. If content is changed, embeddings will be regenerated.'),
+  memory_id: z
+    .string()
+    .describe('The unique ID of the memory to update (obtained from search results)'),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      'New content to replace the existing memory content. If content is changed, embeddings will be regenerated.'
+    ),
   metadata: z
     .object({
-      project: z.string().optional().describe('Updated project path - MUST be the current working directory path (e.g., /Users/name/projects/myapp)'),
-      tags: z.array(z.string()).optional().describe('Updated tags for categorization (e.g., ["typescript", "bug-fix"])'),
+      project: z
+        .string()
+        .optional()
+        .describe(
+          'Updated project path - MUST be the current working directory path (e.g., /Users/name/projects/myapp)'
+        ),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe('Updated tags for categorization (e.g., ["typescript", "bug-fix"])'),
     })
     .optional()
     .describe('Updated metadata for the memory'),
@@ -18,7 +33,8 @@ export const UpdateMemorySchema = z.object({
 const name = 'update_memory';
 const config = {
   title: 'Update Memory',
-  description: 'Update an existing memory. You can change the content (which regenerates embeddings), project path, or tags. The original timestamp is preserved. Use this when a memory needs correction or additional information.',
+  description:
+    'Update an existing memory. You can change the content (which regenerates embeddings), project path, or tags. The original timestamp is preserved. Use this when a memory needs correction or additional information.',
   inputSchema: UpdateMemorySchema,
 };
 
@@ -28,7 +44,7 @@ export const registerUpdateMemoryTool = (server: McpServer) => {
     const { memory_id, content, metadata } = validatedArgs;
 
     try {
-      await databaseService.updateMemory(memory_id, content, metadata);
+      await memoryService.updateMemory(memory_id, content, metadata);
 
       return {
         content: [

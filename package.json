@@ -25,15 +25,21 @@
     "vector-database",
     "lancedb"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "Taha Shahid",
   "license": "MIT",
+  "mcpName": "io.github.taha-shahid1/semantic-recall",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/mcp-semantic-recall"
+    "url": "https://github.com/taha-shahid1/mcp-semantic-recall.git"
   },
-  "homepage": "https://github.com/yourusername/mcp-semantic-recall#readme",
+  "homepage": "https://github.com/taha-shahid1/mcp-semantic-recall#readme",
   "bugs": {
-    "url": "https://github.com/yourusername/mcp-semantic-recall/issues"
+    "url": "https://github.com/taha-shahid1/mcp-semantic-recall/issues"
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.26.2",

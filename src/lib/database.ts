@@ -250,6 +250,60 @@ class DatabaseService {
     await this.table.delete(`id = '${memoryId}'`);
   }
 
+  async listMemories(
+    options?: {
+      project?: string;
+      tags?: string[];
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<
+    Array<{
+      id: string;
+      content: string;
+      timestamp: number;
+      project?: string;
+      tags?: string[];
+      usage_count?: number;
+      last_used?: number;
+    }>
+  > {
+    if (!this.table) {
+      throw new Error('Database not initialized');
+    }
+
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+
+    let query = this.table.query();
+
+    // Filter by project if specified
+    if (options?.project) {
+      query = query.where(`project = '${options.project}'`);
+    }
+
+    // Filter by tags if specified
+    if (options?.tags && options.tags.length > 0) {
+      const tagFilter = options.tags.map((tag) => `array_contains(tags, '${tag}')`).join(' OR ');
+      query = query.where(tagFilter);
+    }
+
+    const results = await query.limit(limit + offset).toArray();
+
+    // Manual offset (LanceDB doesn't have native offset)
+    const slicedResults = results.slice(offset, offset + limit);
+
+    return slicedResults.map((result: any) => ({
+      id: result.id as string,
+      content: result.content as string,
+      timestamp: result.timestamp as number,
+      project: result.project as string | undefined,
+      tags: result.tags as string[] | undefined,
+      usage_count: result.usage_count as number | undefined,
+      last_used: result.last_used as number | undefined,
+    }));
+  }
+
   async close(): Promise<void> {
     this.db = null;
     this.table = null;

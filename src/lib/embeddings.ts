@@ -18,8 +18,6 @@ class EmbeddingService {
       return;
     }
 
-    // TODO: When implementing database, check if model is already set in DB
-    // and use that instead of re-detecting. This ensures consistency across sessions.
     const ollamaAvailable = await this.checkOllamaAvailable();
 
     if (ollamaAvailable) {
